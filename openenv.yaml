@@ -95,7 +95,8 @@ tasks:
     difficulty: hard
     description: >
       Winter weekday with short solar hours, extreme evening peaks.
-      Goal: net revenue > Rs 12. Perfectly time charge/discharge cycles.
+      ADVERSARIAL: Deceptive price spike at hour 15 punishes early sellers.
+      Goal: net revenue > Rs 20. Perfectly time charge/discharge cycles.
 
 endpoints:
   websocket: /ws

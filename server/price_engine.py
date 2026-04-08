@@ -103,11 +103,13 @@ WEEKEND_CONSUMPTION = [
 ]
 
 
-def generate_price_profile(season: str, day_type: str, noise_pct: float = 0.1) -> List[float]:
+def generate_price_profile(season: str, day_type: str, noise_pct: float = 0.1, adversarial_mode: bool = False) -> List[float]:
     """Generate a 24-hour price profile.
 
     For summer: randomly picks a real historical IEX day and adds noise.
     For winter/monsoon: uses template profiles with noise (no real data available).
+    When adversarial_mode is True for winter, adds a deceptive price spike at hour 15
+    to punish agents who sell too early instead of waiting for evening peak.
     """
     if season == "summer":
         if day_type == "weekend":
@@ -117,7 +119,10 @@ def generate_price_profile(season: str, day_type: str, noise_pct: float = 0.1) -
             # Pick a random real weekday
             base = random.choice(IEX_SUMMER_WEEKDAY_DAYS)
     elif season == "winter":
-        base = WINTER_WEEKDAY_PRICES
+        base = WINTER_WEEKDAY_PRICES.copy()
+        # Adversarial: add deceptive spike at hour 15 that lures early sellers
+        if adversarial_mode:
+            base[15] = 7.5  # Fake spike - looks like peak but evening will be higher (8.5-9)
     else:
         base = MONSOON_WEEKDAY_PRICES
 

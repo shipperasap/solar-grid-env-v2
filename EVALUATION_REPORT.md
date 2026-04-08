@@ -168,11 +168,12 @@ Season thresholds: Summer great=Rs 35, good=Rs 18 | Monsoon great=Rs 18, good=Rs
 - **Key challenge:** Weekend evening peaks are weaker (~Rs 5-7.5 vs weekday Rs 7-10), so the agent must be more selective about when to sell
 
 ### Task 4: Winter Peak Maximizer (Hard)
-- **Scenario:** Winter weekday, short solar hours, extreme evening peaks (Rs 7-9), 12% noise
-- **Initial battery:** 20% charged
-- **Pass threshold:** Net revenue > Rs 12
-- **What it tests:** Can the agent combine solar storage + precisely timed peak selling?
-- **Key challenge:** Low initial battery, short solar window, high consumption. Night buying is a trap in winter — solar surplus alone fills the battery for free
+- **Scenario:** Winter weekday, short solar hours, extreme evening peaks (Rs 7-9), 15% noise
+- **Initial battery:** 15% charged (lower than other tasks)
+- **Pass threshold:** Net revenue > Rs 20 (raised from Rs 17)
+- **Adversarial element:** Deceptive price spike at hour 15 (Rs 7.5) lures early sellers — true peak is hours 19-20 (Rs 8.5-9). Agents selling at hour 15 lose significant score bonus.
+- **What it tests:** Can the agent combine solar storage + precisely timed peak selling while avoiding adversarial traps?
+- **Key challenge:** Low initial battery, short solar window, high consumption, adversarial pricing. Night buying is a trap in winter — solar surplus alone fills the battery for free. Patience required.
 
 ---
 

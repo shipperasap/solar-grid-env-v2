@@ -120,7 +120,8 @@ def run_task(task_id: str):
             env.state.day_type = config["day_type"]
             env.state.battery_soc = config["initial_soc"]
             env.state.price_profile = generate_price_profile(
-                config["season"], config["day_type"], config.get("noise_level", 0.1)
+                config["season"], config["day_type"], config.get("noise_level", 0.1),
+                adversarial_mode=config.get("adversarial_mode", False)
             )
             env.state.solar_profile = generate_solar_profile(config["season"], 5.0)
             env.state.consumption_profile = generate_consumption_profile(

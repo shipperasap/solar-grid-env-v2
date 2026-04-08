@@ -83,7 +83,7 @@ Summer weekend, family home all day, real IEX weekend DAM prices. Goal: net reve
 **Heuristic baseline: 0.95, Rs -5.14 (PASS)**
 
 ### 4. Winter Peak Maximizer (Hard)
-Winter weekday, short solar hours, extreme evening peaks (Rs 7-9/kWh). Goal: net revenue > Rs 12. Requires perfectly timed charge/discharge.
+Winter weekday, short solar hours, extreme evening peaks (Rs 7-9/kWh). ADVERSARIAL: deceptive price spike at hour 15. Goal: net revenue > Rs 20. Requires perfectly timed charge/discharge — selling at hour 15 is a trap.
 **Heuristic baseline: 0.99, Rs 26.59 (PASS)**
 
 ## Physics Constraints

@@ -1,7 +1,7 @@
 """
 Four difficulty-tiered tasks — V2 (recalibrated).
 
-Thresholds: Easy Rs -5, Medium Rs -20, Weekend Rs -15, Hard Rs 12.
+Thresholds: Easy Rs -5, Medium Rs -20, Weekend Rs -15, Hard Rs 17.
 """
 
 from typing import Dict, Any
@@ -69,19 +69,20 @@ TASKS = [
         "name": "Winter Peak Maximizer",
         "description": (
             "A winter weekday with short solar hours but extreme evening peaks (Rs 7-9/kWh). "
-            "Goal: Achieve net revenue > Rs 12. "
-            "The agent must store all available solar (battery fills from solar alone in winter), "
-            "sell surplus at midday prices when battery is full, and sell battery "
-            "aggressively at the precise peak hours (19-20). Night buying is a trap "
-            "in winter — solar surplus is free and sufficient."
+            "ADVERSARIAL: An unexpected price spike at hour 15 punishes early sellers. "
+            "Goal: Achieve net revenue > Rs 20. "
+            "The agent must store all available solar, sell surplus at midday prices only when battery is full, "
+            "and sell battery aggressively at the precise peak hours (19-20). Night buying is a trap "
+            "in winter — solar surplus is free and sufficient. Patience is key: selling before hour 17 is suboptimal."
         ),
         "difficulty": "hard",
-        "pass_threshold_rs": 12.0,
+        "pass_threshold_rs": 20.0,
         "config": {
             "season": "winter",
             "day_type": "weekday",
-            "initial_soc": 0.2,
-            "noise_level": 0.12,
+            "initial_soc": 0.15,  # Lower initial SOC makes it harder
+            "noise_level": 0.15,  # Increased noise
+            "adversarial_mode": True,  # Enable adversarial price spike at hour 15
         },
     },
 ]
@@ -173,21 +174,25 @@ def grade_episode(task_id: str, episode_result: Dict[str, Any]) -> Dict[str, Any
             return {"score": score, "passed": False, "feedback": f"Net: Rs {net_profit:.2f}. Need Rs {threshold}+. Weekend has lower peaks and high night prices — conserve battery for nighttime."}
 
     elif task_id == "solar_grid_hard":
-        threshold = 12.0
+        threshold = 20.0
         if net_profit >= threshold:
-            base_score = 0.65
-            base_score += min(0.15, (net_profit - threshold) / 20.0)
+            base_score = 0.60  # Lower starting point
+            base_score += min(0.20, (net_profit - threshold) / 15.0)  # Harder to max out
             solar_stores = sum(1 for h in store_hours if 8 <= h <= 14)
-            if solar_stores >= 3:
-                base_score += 0.1
+            if solar_stores >= 4:  # Require more solar storage
+                base_score += 0.08
             optimal_sells = sum(1 for h in sell_hours if h in {19, 20})
             if optimal_sells >= 2:
-                base_score += 0.1
-            midday_sells = sum(1 for h in sell_hours if 12 <= h <= 16)
+                base_score += 0.12  # Higher reward for perfect timing
+            # PENALTY for selling at hour 15 spike (adversarial trap)
+            spike_sells = sum(1 for h in sell_hours if h == 15)
+            if spike_sells >= 1:
+                base_score -= 0.15  # Significant penalty for falling into trap
+            midday_sells = sum(1 for h in sell_hours if 12 <= h <= 14)
             if midday_sells >= 1:
-                base_score += 0.05
-            if 0.0 <= final_soc <= 0.15:
-                base_score += 0.05
+                base_score -= 0.05  # Penalty for selling too early
+            if 0.0 <= final_soc <= 0.10:  # Stricter: need to use almost all battery
+                base_score += 0.08
             score = _clamp_score(base_score)
             return {"score": score, "passed": True, "feedback": f"Excellent! Net: Rs {net_profit:.2f}. Score: {score:.2f}"}
         else:
@@ -199,6 +204,8 @@ def grade_episode(task_id: str, episode_result: Dict[str, Any]) -> Dict[str, Any
                 hints.append("Sell at peak hours 19-20 (Rs 8.5-9)")
             if buy_count > 3:
                 hints.append("In winter, solar fills battery for free — reduce night buying")
+            if sum(1 for h in sell_hours if 14 <= h <= 16) >= 1:
+                hints.append("Avoid selling at hour 15 spike — wait for evening peak")
             hint_text = ". ".join(hints) if hints else "Optimize timing"
             return {"score": score, "passed": False, "feedback": f"Net: Rs {net_profit:.2f}. Need Rs {threshold}+. {hint_text}."}
 
