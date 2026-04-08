@@ -1,7 +1,7 @@
 """
 Inference script for Solar Grid Environment.
 Uses OpenAI Client for LLM-based decision making.
-Prints results in exact OpenEnv stdout format.
+Prints results in strict OpenEnv stdout format.
 
 Env vars required:
   API_BASE_URL  - The API endpoint for the LLM
@@ -13,7 +13,6 @@ import os
 import sys
 import json
 
-# Ensure server package is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from server.environment import SolarGridEnvironment
@@ -21,10 +20,6 @@ from server.models import SolarGridAction, ActionType
 from server.tasks import TASKS, grade_episode
 from server.price_engine import generate_price_profile, generate_solar_profile, generate_consumption_profile
 
-from server.inference import smart_policy as fallback_policy_impl
-from openai import OpenAI
-
-# --- Configuration from environment ---
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -32,6 +27,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 if HF_TOKEN is None:
     raise ValueError("HF_TOKEN environment variable is required")
 
+from openai import OpenAI
 client = OpenAI(
     base_url=API_BASE_URL,
     api_key=HF_TOKEN,
@@ -60,6 +56,77 @@ Strategy tips (based on real IEX DAM prices):
 Respond with ONLY valid JSON: {"action_type": "sell|store|buy|hold", "amount_kwh": <float>}"""
 
 
+def smart_policy(observation: dict) -> SolarGridAction:
+    """Heuristic fallback policy."""
+    hour = observation["hour"]
+    price = observation["current_price"]
+    solar = observation["solar_generation_kwh"]
+    soc = observation["battery_soc"]
+    consumption = observation["energy_consumed_kwh"]
+    next_prices = observation["next_3h_prices"]
+    season = observation.get("season", "summer")
+    day = observation.get("day_type", "weekday")
+
+    net_solar = solar - consumption
+    battery_kwh = soc * 13.5
+
+    if season == "monsoon":
+        if hour <= 5 and price < 5.0 and soc < 0.95:
+            return SolarGridAction(action_type=ActionType.BUY, amount_kwh=min(5.0, (1.0 - soc) * 13.5 / 0.92))
+        if 6 <= hour <= 17 and net_solar > 0.0 and soc < 1.0:
+            return SolarGridAction(action_type=ActionType.STORE, amount_kwh=min(net_solar, 5.0))
+        if 18 <= hour <= 21 and price > 5.5 and soc > 0.40:
+            max_safe_sell = (soc - 0.40) * 13.5
+            sell = min(5.0, battery_kwh * 0.5)
+            if hour in [19, 20]:
+                sell = min(5.0, battery_kwh * 0.8)
+            return SolarGridAction(action_type=ActionType.SELL, amount_kwh=max(0.0, min(sell, max_safe_sell)))
+
+    elif season == "winter":
+        if hour <= 5 and price < 2.8 and soc < 0.15:
+            return SolarGridAction(action_type=ActionType.BUY, amount_kwh=max(0.5, min(3.0, (0.3 - soc) * 13.5 / 0.92)))
+        if 7 <= hour <= 15 and net_solar > 0.3 and soc < 0.95:
+            return SolarGridAction(action_type=ActionType.STORE, amount_kwh=min(net_solar, 5.0))
+        if 10 <= hour <= 16 and net_solar > 0.5 and soc > 0.92:
+            return SolarGridAction(action_type=ActionType.SELL, amount_kwh=min(net_solar, 5.0))
+        if 18 <= hour <= 21 and price > 5.5 and soc > 0.1:
+            if hour in [19, 20] and price > 7.0:
+                sell = min(5.0, battery_kwh * 0.7)
+            else:
+                sell = min(5.0, battery_kwh * 0.4)
+            return SolarGridAction(action_type=ActionType.SELL, amount_kwh=max(0.5, sell))
+
+    elif season == "summer":
+        hourly_avg = [
+            0.35, 0.30, 0.30, 0.30, 0.30, 0.40,
+            0.65, 1.00, 0.80, 0.55, 0.55, 0.65,
+            0.65, 0.80, 1.00, 1.30, 1.55, 1.95,
+            2.60, 3.25, 2.60, 1.95, 1.30, 0.65,
+        ]
+        remaining_consumption = sum(hourly_avg[h] for h in range(hour + 1, 24))
+        reserve_mult = 1.3 if day == "weekend" else 1.1
+        reserve_kwh = min(remaining_consumption * reserve_mult, 13.5 * 0.65)
+        reserve_soc = reserve_kwh / 13.5
+
+        if 9 <= hour <= 14 and price < 2.0 and soc < 0.85:
+            return SolarGridAction(action_type=ActionType.BUY, amount_kwh=min(5.0, (0.95 - soc) * 13.5 / 0.92))
+        if 6 <= hour <= 16 and net_solar > 0.3 and soc < 0.95:
+            return SolarGridAction(action_type=ActionType.STORE, amount_kwh=min(net_solar, 5.0))
+        if 8 <= hour <= 16 and net_solar > 0.5 and soc > 0.92:
+            return SolarGridAction(action_type=ActionType.SELL, amount_kwh=min(net_solar, 5.0))
+        sell_threshold = 5.5 if day == "weekend" else 4.5
+        if 18 <= hour <= 20 and price > sell_threshold and soc > reserve_soc + 0.05:
+            sellable_kwh = (soc - reserve_soc) * 13.5
+            sell = min(5.0, sellable_kwh * 0.7)
+            if hour in [19, 20] and price > 7.0:
+                sell = min(5.0, sellable_kwh * 0.9)
+            return SolarGridAction(action_type=ActionType.SELL, amount_kwh=max(0.5, sell))
+        if hour >= 21 and soc > reserve_soc + 0.1 and price > 6.0:
+            return SolarGridAction(action_type=ActionType.SELL, amount_kwh=max(0.5, min(2.0, (soc - reserve_soc) * 13.5)))
+
+    return SolarGridAction(action_type=ActionType.HOLD, amount_kwh=min(solar, consumption, 5.0))
+
+
 def get_llm_action(observation: dict) -> SolarGridAction:
     """Use OpenAI-compatible LLM to decide action."""
     obs_summary = (
@@ -84,7 +151,6 @@ def get_llm_action(observation: dict) -> SolarGridAction:
             max_tokens=100,
         )
         content = response.choices[0].message.content.strip()
-        # Parse JSON from response (handle markdown code blocks)
         if "```" in content:
             content = content.split("```")[1]
             if content.startswith("json"):
@@ -96,8 +162,7 @@ def get_llm_action(observation: dict) -> SolarGridAction:
             amount_kwh=min(10.0, max(0.0, float(data["amount_kwh"]))),
         )
     except Exception:
-        # Fallback to heuristic if LLM fails
-        return fallback_policy_impl(observation)
+        return smart_policy(observation)
 
 
 def run_task(task_id: str):
@@ -105,7 +170,7 @@ def run_task(task_id: str):
     env = SolarGridEnvironment()
     all_rewards = []
     step_count = 0
-    score = 0.01
+    score = 0.0
     success = False
 
     print(f"[START] task={task_id} env={BENCHMARK} model={MODEL_NAME}", flush=True)
@@ -149,6 +214,9 @@ def run_task(task_id: str):
                     flush=True,
                 )
 
+                if done:
+                    break
+
             except Exception as e:
                 step_count += 1
                 all_rewards.append(0.0)
@@ -159,7 +227,6 @@ def run_task(task_id: str):
                     flush=True,
                 )
 
-        # Grade
         grade = grade_episode(task_id, {
             "cumulative_revenue": env.state.cumulative_revenue,
             "cumulative_cost": env.state.cumulative_cost,
