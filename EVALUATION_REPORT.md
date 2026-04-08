@@ -107,7 +107,7 @@ total = profit(50%) + strategy(25%) + efficiency(15%) + penalty(10%)
 | Condition | Signal | Purpose |
 |---|---|---|
 | Store during solar hours (7-16), battery < 90% | +0.20 | Teach "save for peak" |
-| Sell at peak (18-21), price > Rs 5.5 | +0.20 x (price/7) | Reward peak exploitation |
+| Sell at peak (18-21), price > Rs 4.5 | +0.20 x (price/6) | Reward peak exploitation |
 | Sell solar surplus when battery full | +0.12 | Don't waste free energy |
 | Sell cheap when peak is coming | -0.12 | Punish impatience |
 | Buy at night, monsoon, SOC < 40% | +0.15 | Reward smart arbitrage |
@@ -149,9 +149,9 @@ Season thresholds: Summer great=Rs 35, good=Rs 18 | Monsoon great=Rs 18, good=Rs
 ### Task 1: Sunny Day Basics (Easy)
 - **Scenario:** Summer weekday, real IEX prices, 5% noise
 - **Initial battery:** 50% charged
-- **Pass threshold:** Net revenue > Rs -5
+- **Pass threshold:** Net revenue > Rs -5 (lowered from Rs 0 because real IEX data has expensive nights at Rs 3-9/kWh — household consumption costs are unavoidable and eat into revenue. Rs -5 still requires smart trading; a hold-only policy scores ~Rs -15)
 - **What it tests:** Can the agent learn the basic solar arbitrage cycle?
-- **Optimal play:** Store solar midday, sell surplus when battery full, sell at evening peak
+- **Optimal play:** Store/buy at midday solar glut (~Rs 1/kWh), sell at evening peak, conserve battery for expensive nights
 
 ### Task 2: Monsoon Arbitrage (Medium)
 - **Scenario:** Monsoon weekday, cloud cover cuts solar ~50%, 10% noise
@@ -184,7 +184,7 @@ Season thresholds: Summer great=Rs 35, good=Rs 18 | Monsoon great=Rs 18, good=Rs
 |---|---|
 | HF Space returns HTTP 200 | PASS |
 | Root endpoint returns env info + 4 tasks | PASS |
-| `reset()` returns valid observation (13 fields) | PASS |
+| `reset()` returns valid observation (12 fields) | PASS |
 | `step()` returns reward in [-1,1] and done flag | PASS |
 | Full 24-step episode completes correctly | PASS |
 | `openenv.yaml` present at root | PASS |
@@ -196,57 +196,50 @@ Season thresholds: Summer great=Rs 35, good=Rs 18 | Monsoon great=Rs 18, good=Rs
 | REST endpoints `/reset`, `/step/{id}` functional | PASS |
 | 7 unit tests pass | PASS |
 
-### 8.2 Heuristic Baseline Results (V2 Season-Aware Policy)
+### 8.2 Heuristic Baseline Results (V2 Season-Aware Policy, Real IEX Prices)
 
 | Task | Difficulty | Net Revenue | Score | Status |
 |---|---|---|---|---|
-| Sunny Day Basics | Easy | Rs 48.09 | **0.99** | **PASS** |
-| Monsoon Arbitrage | Medium | Rs -9.41 | **0.80** | **PASS** |
-| Winter Peak Maximizer | Hard | Rs 21.46 | **0.99** | **PASS** |
+| Sunny Day Basics | Easy | Rs 4.02 | **0.75** | **PASS** |
+| Monsoon Arbitrage | Medium | Rs -5.21 | **0.80** | **PASS** |
+| Weekend Summer Surplus | Medium | Rs -5.14 | **0.95** | **PASS** |
+| Winter Peak Maximizer | Hard | Rs 26.59 | **0.99** | **PASS** |
 
-**All 3 tasks pass with the heuristic baseline.**
+**All 4 tasks pass with the heuristic baseline.**
 
-### 8.3 LLM Agent Results (Gemini 2.5 Flash)
+Note: Summer tasks show lower absolute revenue than V1 templates because real IEX night prices (Rs 3-9/kWh) make nighttime household consumption expensive. This is realistic — the environment now accurately reflects the cost structure prosumers face.
 
-The LLM receives each observation as a text prompt with strategy tips and returns JSON action decisions.
-
-| Task | Difficulty | Net Revenue | Score | Status |
-|---|---|---|---|---|
-| Sunny Day Basics | Easy | Rs 59.75 | **1.00** | **PASS** |
-| Monsoon Arbitrage | Medium | Rs -18.07 | **0.00** | **FAIL** |
-| Winter Peak Maximizer | Hard | Rs 23.21 | **1.00** | **PASS** |
-
-### 8.4 Analysis
+### 8.3 Analysis
 
 | Observation | Insight |
 |---|---|
-| **Easy task trivial** | Both heuristic and LLM achieve perfect scores — validates the baseline difficulty |
-| **Medium task differentiates agents** | Heuristic passes (0.80), LLM fails (0.00) — the LLM over-sells at peak, draining reserves needed for nighttime consumption. This proves the environment rewards *careful* trading, not just aggressive selling |
-| **Hard task rewards planning** | Both pass, but require precise solar storage timing + peak selling coordination |
-| **Clear seasonality** | Different strategies work in different seasons. Summer = store and sell surplus. Monsoon = manage high initial SOC carefully. Winter = store all solar, sell at extreme peaks. This proves the environment effectively measures adaptation |
+| **Easy task requires real strategy** | Real IEX data eliminated the "trivial" easy task — even the heuristic earns only Rs 4 because night consumption costs are real. A hold-only policy loses ~Rs 15. This better differentiates agents |
+| **Monsoon remains the LLM trap** | High initial SOC (80%) tempts aggressive selling, but draining reserves for nighttime forces expensive grid purchases. Heuristic passes (0.80) by conserving battery |
+| **Weekend adds new dynamics** | Lower weekend peaks (Rs 5-7.5 vs weekday Rs 7-10) and higher daytime consumption change the optimal strategy. The agent must be more conservative about selling |
+| **Winter has the highest ceiling** | Rs 26+ possible because evening peaks hit Rs 7-9 while solar is free. Requires precise timing but rewards it heavily |
+| **Real price data matters** | The biggest change from V1: midday solar glut crashes prices to ~Rs 1/kWh, making midday-to-evening arbitrage the dominant strategy (not the textbook night-to-peak play) |
 
 ---
 
-## 9. Sample Agent Trace (Heuristic, Easy Task)
+## 9. Sample Agent Trace (Heuristic, Easy Task — Real IEX Prices)
 
 ```
-Hour  0: hold    — night, no solar, conserve battery (SOC 47%)
-Hour  1: hold    — night, minimal consumption
+Hour  0: hold    — night Rs 3.39/kWh (expensive!), conserve battery (SOC 46%)
 Hour  5: hold    — sunrise, tiny solar starts
-Hour  6: hold    — solar just covers consumption
 Hour  7: store 0.7 — solar surplus begins, charge battery
-Hour  8: store 2.1 — strong solar, battery filling (SOC 56%)
-Hour  9: store 3.1 — peak solar hours (SOC 77%)
-Hour 10: store 4.1 — battery nearly full (SOC 100%)
-Hour 11: sell 4.2 — battery full! Sell surplus at Rs 4.23
-Hour 12: sell 4.8 — continue selling free solar surplus
-Hour 13: sell 4.0 — afternoon surplus
-Hour 17: hold    — transition to evening, self-consume
-Hour 18: sell 5.0 — PEAK! Rs 5.31, sell from battery
-Hour 19: sell 1.8 — Rs 8.00! Peak of peak, drain remaining battery
-Hour 20: hold    — battery empty, ride out the night
-Result: Rs 48.09 revenue, Score 1.00 PASS
+Hour  8: store 2.0 — prices dropping to Rs 2.17 as solar floods grid
+Hour  9: buy  5.0 — solar glut! Price crashed to Rs 1.51, fill battery (SOC 90%)
+Hour 10: store 3.7 — Rs 0.77/kWh, cheapest hour, top off battery (SOC 100%)
+Hour 11: sell 4.6 — battery full, sell surplus at Rs 0.85 (low but free solar)
+Hour 12-16: sell  — continue selling free solar surplus at Rs 0.85-2.10
+Hour 17: hold    — self-consume, save battery for evening
+Hour 18: hold    — evening, battery powering consumption (SOC 71%)
+Hour 19: sell 1.7 — Rs 4.60 peak, sell above reserve
+Hour 20-22: hold — battery powers night consumption, avoids Rs 3.3-3.6 grid
+Result: Rs 4.02 net revenue, Score 0.75 PASS
 ```
+
+**Key insight:** Real IEX data completely changes the strategy. Night buying is a trap (Rs 3-9/kWh). The winning play is midday buying/storing when solar crashes prices to ~Rs 1/kWh, then selling at evening peak while keeping enough battery to avoid expensive night grid purchases.
 
 ---
 
@@ -265,15 +258,13 @@ Result: Rs 48.09 revenue, Score 1.00 PASS
 
 | Resource | URL |
 |---|---|
-| HuggingFace Space | https://huggingface.co/spaces/shipperasap/solar-grid-env |
-| GitHub Repository | https://github.com/shipperasap/solar-grid-env |
-| Interactive API Docs | https://shipperasap-solar-grid-env.hf.space/docs |
+| GitHub Repository | https://github.com/shipperasap/solar-grid-env-v2 |
 
 ### Quick Start
 ```bash
 # Clone and install
-git clone https://github.com/shipperasap/solar-grid-env.git
-cd solar-grid-env
+git clone https://github.com/shipperasap/solar-grid-env-v2.git
+cd solar-grid-env-v2
 pip install -r server/requirements.txt
 
 # Run tests
@@ -314,10 +305,10 @@ solar_grid_env/
 └── server/
     ├── __init__.py
     ├── models.py           # Pydantic: SolarGridAction, Observation, State
-    ├── price_engine.py     # IEX DAM price profiles (3 seasons x 2 day types)
+    ├── price_engine.py     # Real IEX DAM prices (summer) + template profiles (winter/monsoon)
     ├── reward.py           # 4-component dense reward function
     ├── environment.py      # Core: reset(), step(), 24-hour episodes
-    ├── tasks.py            # 3 tasks + grading rubrics
+    ├── tasks.py            # 4 tasks + grading rubrics
     ├── server.py           # FastAPI + WebSocket server
     ├── inference.py        # Heuristic policy (season-aware V2)
     ├── test_environment.py # 7 unit tests

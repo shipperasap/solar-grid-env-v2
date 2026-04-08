@@ -9,16 +9,17 @@ pinned: false
 
 # Solar Grid Arbitrage — Indian Electricity Market
 
-An RL environment simulating a rooftop solar prosumer with battery storage making hourly energy trading decisions on India's **IEX Day-Ahead Market (DAM)**. The agent decides each hour whether to sell surplus power to the grid, store it in a battery, buy cheap grid power, or self-consume — maximizing daily revenue using real IEX price patterns.
+An RL environment simulating a rooftop solar prosumer with battery storage making hourly energy trading decisions on India's **IEX Day-Ahead Market (DAM)**. The agent decides each hour whether to sell surplus power to the grid, store it in a battery, buy grid power, or self-consume — maximizing daily revenue using **real IEX DAM clearing prices** (April 2026).
 
 ## Domain Background
 
 India's **Indian Energy Exchange (IEX)** operates the Day-Ahead Market where electricity is traded in hourly blocks. With India's push toward "One Nation One Grid" and upcoming P2P trading regulations from CERC, rooftop solar prosumers will increasingly participate in electricity markets. This environment models that future — a household with a 5kW rooftop solar system and 13.5kWh battery (Tesla Powerwall class) trading on IEX DAM.
 
-Key dynamics:
-- **Solar glut at midday** drives IEX prices down (Rs 2.5-3.5/kWh)
-- **Evening peak (18:00-21:00)** drives prices to Rs 6-9/kWh
-- **Night trough (00:00-05:00)** offers cheap buying opportunity
+Key dynamics (from real IEX DAM data, April 2026):
+- **Solar glut at midday (09:00-15:00)** crashes IEX prices to Rs 0.7-2.0/kWh — the cheapest power of the day
+- **Evening peak (18:00-21:00)** drives prices to Rs 4-10/kWh
+- **Night hours (00:00-05:00)** are surprisingly expensive (Rs 3-9/kWh) due to base-load demand
+- **Best arbitrage:** buy/store at midday, sell at evening peak (not the traditional night-to-peak play)
 - Battery efficiency losses (8% charge, 5% discharge, 3% grid transmission)
 
 ## State Space (Observation)
@@ -71,19 +72,19 @@ End-of-episode bonus based on daily net profit.
 
 ### 1. Sunny Day Basics (Easy)
 Summer weekday, high solar, real IEX prices. Goal: net revenue > Rs -5. Store solar midday when prices crash, sell at evening peak, conserve battery for expensive nights.
-**Baseline score: PASS**
+**Heuristic baseline: 0.75, Rs 4.02 (PASS)**
 
 ### 2. Monsoon Arbitrage (Medium)
-Monsoon weekday, reduced solar. Goal: net revenue > Rs -20 via buy-low-sell-high. Less solar means less surplus to sell.
-**Baseline score: challenging (room for LLM agent improvement)**
+Monsoon weekday, reduced solar. Goal: net revenue > Rs -20. Less solar means less surplus to sell — agent must manage high initial SOC carefully.
+**Heuristic baseline: 0.80, Rs -5.21 (PASS)**
 
 ### 3. Weekend Summer Surplus (Medium)
 Summer weekend, family home all day, real IEX weekend DAM prices. Goal: net revenue > Rs -15. Lower and less peaky prices than weekdays — requires adapting strategy to weekend dynamics.
-**Baseline score: PASS**
+**Heuristic baseline: 0.95, Rs -5.14 (PASS)**
 
 ### 4. Winter Peak Maximizer (Hard)
 Winter weekday, short solar hours, extreme evening peaks (Rs 7-9/kWh). Goal: net revenue > Rs 12. Requires perfectly timed charge/discharge.
-**Baseline score: 1.00 (PASS with V2 heuristic)**
+**Heuristic baseline: 0.99, Rs 26.59 (PASS)**
 
 ## Physics Constraints
 
