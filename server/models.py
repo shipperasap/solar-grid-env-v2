@@ -23,7 +23,6 @@ class SolarGridObservation(BaseModel):
     next_3h_prices: List[float] = Field(..., description="Forecast prices for next 3 hours")
     solar_generation_kwh: float = Field(..., ge=0, description="Solar output this hour in kWh")
     battery_soc: float = Field(..., ge=0.0, le=1.0, description="Battery state of charge (0-1)")
-    battery_capacity_kwh: float = Field(..., description="Total battery capacity in kWh")
     energy_consumed_kwh: float = Field(..., description="Household consumption this hour")
     cumulative_revenue: float = Field(..., description="Total Rs earned so far today")
     cumulative_cost: float = Field(..., description="Total Rs spent so far today")

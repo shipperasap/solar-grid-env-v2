@@ -50,11 +50,12 @@ Each hour you must choose ONE action:
 
 And specify amount_kwh (0.0 to 10.0).
 
-Strategy tips:
-- Night (0-5): Buy cheap if price < 3.5 Rs/kWh and battery < 70%
-- Midday (6-16): Store solar surplus for evening peak
-- Evening peak (18-21): SELL when prices are highest (6-9 Rs/kWh)
-- Avoid selling during cheap hours when peak is coming
+Strategy tips (based on real IEX DAM prices):
+- Night (0-5): Prices are HIGH (Rs 3-9), do NOT buy at night in summer
+- Midday (9-14): Prices CRASH to Rs 1-2 due to solar — BUY cheap power here
+- Store solar surplus during day hours (6-16) for later
+- Evening peak (18-21): SELL when prices spike (Rs 4-10)
+- The biggest arbitrage is midday-to-evening, not night-to-evening
 
 Respond with ONLY valid JSON: {"action_type": "sell|store|buy|hold", "amount_kwh": <float>}"""
 

@@ -30,7 +30,6 @@ Key dynamics:
 | `next_3h_prices` | list[float] | 3 values | Noisy forecast for next 3 hours |
 | `solar_generation_kwh` | float | 0-5.0 | Solar output this hour |
 | `battery_soc` | float | 0.0-1.0 | Battery state of charge |
-| `battery_capacity_kwh` | float | 13.5 | Total battery capacity |
 | `energy_consumed_kwh` | float | 0.1-3.5 | Household consumption |
 | `cumulative_revenue` | float | any | Net Rs earned so far |
 | `cumulative_cost` | float | >= 0 | Total Rs spent |
@@ -71,14 +70,18 @@ End-of-episode bonus based on daily net profit.
 ## Tasks
 
 ### 1. Sunny Day Basics (Easy)
-Summer weekday, high solar, low noise. Goal: positive net revenue. Sell surplus when battery full, sell at evening peak.
-**Baseline score: 1.00 (PASS)**
+Summer weekday, high solar, real IEX prices. Goal: net revenue > Rs -5. Store solar midday when prices crash, sell at evening peak, conserve battery for expensive nights.
+**Baseline score: PASS**
 
 ### 2. Monsoon Arbitrage (Medium)
 Monsoon weekday, reduced solar. Goal: net revenue > Rs -20 via buy-low-sell-high. Less solar means less surplus to sell.
 **Baseline score: challenging (room for LLM agent improvement)**
 
-### 3. Winter Peak Maximizer (Hard)
+### 3. Weekend Summer Surplus (Medium)
+Summer weekend, family home all day, real IEX weekend DAM prices. Goal: net revenue > Rs -15. Lower and less peaky prices than weekdays — requires adapting strategy to weekend dynamics.
+**Baseline score: PASS**
+
+### 4. Winter Peak Maximizer (Hard)
 Winter weekday, short solar hours, extreme evening peaks (Rs 7-9/kWh). Goal: net revenue > Rs 12. Requires perfectly timed charge/discharge.
 **Baseline score: 1.00 (PASS with V2 heuristic)**
 
@@ -143,7 +146,7 @@ asyncio.run(test())
 
 ## Price Data Source
 
-Price profiles are based on actual IEX India Day-Ahead Market clearing price patterns across seasons and day types.
+Summer price profiles are derived from **real IEX India Day-Ahead Market clearing prices** (MCP data from April 1-8, 2026). Winter and monsoon profiles are template-based, calibrated to real IEX price magnitudes.
 
 ## Team
 

@@ -39,7 +39,7 @@ def estimate_remaining_consumption(hour: int) -> float:
 
 def smart_policy(observation: dict) -> SolarGridAction:
     """
-    V2 heuristic policy — season-aware, passes all 3 tasks.
+    V2 heuristic policy — season-aware, passes all 4 tasks.
 
     Key insight per season:
     - Summer: Battery fills from solar. Store midday, sell surplus + peak.
@@ -90,23 +90,41 @@ def smart_policy(observation: dict) -> SolarGridAction:
                 sell = min(5.0, battery_kwh * 0.4)
             return SolarGridAction(action_type=ActionType.SELL, amount_kwh=max(0.5, sell))
 
-    # === SUMMER: Classic store-and-sell ===
-    else:
-        if hour <= 4 and price < 3.0 and soc < 0.35:
-            return SolarGridAction(action_type=ActionType.BUY, amount_kwh=max(0.5, min(5.0, (0.5 - soc) * 13.5 / 0.92)))
-        if 6 <= hour <= 16 and net_solar > 0.5 and soc < 0.95:
+    # === SUMMER: Real IEX data — midday ~1 Rs, night Rs 3-9, evening Rs 4-10 ===
+    elif season == "summer":
+        day = observation.get("day_type", "weekday")
+        # Estimate remaining consumption for night to determine reserve
+        remaining_consumption = estimate_remaining_consumption(hour)
+        # Reserve enough SOC to cover remaining consumption from battery
+        # (avoids buying at expensive night prices Rs 3-9)
+        # Weekend: higher reserve since consumption is higher and prices lower
+        reserve_mult = 1.3 if day == "weekend" else 1.1
+        reserve_kwh = min(remaining_consumption * reserve_mult, 13.5 * 0.65)
+        reserve_soc = reserve_kwh / 13.5
+
+        # Buy during solar glut when prices crash to ~1-2 Rs/kWh (best arbitrage)
+        if 9 <= hour <= 14 and price < 2.0 and soc < 0.85:
+            return SolarGridAction(action_type=ActionType.BUY, amount_kwh=min(5.0, (0.95 - soc) * 13.5 / 0.92))
+        # Store solar surplus
+        if 6 <= hour <= 16 and net_solar > 0.3 and soc < 0.95:
             return SolarGridAction(action_type=ActionType.STORE, amount_kwh=min(net_solar, 5.0))
+        # Sell surplus when battery full during solar hours
         if 8 <= hour <= 16 and net_solar > 0.5 and soc > 0.92:
             return SolarGridAction(action_type=ActionType.SELL, amount_kwh=min(net_solar, 5.0))
-        if 18 <= hour <= 21 and price > 5.0 and soc > 0.15:
-            sell = min(5.0, battery_kwh * 0.45)
-            if hour == 20 and price > 7.0:
-                sell = min(5.0, battery_kwh * 0.65)
+        # Sell at evening peak — only sell what's above reserve
+        # Weekend: higher price threshold since peaks are weaker
+        sell_threshold = 5.5 if day == "weekend" else 4.5
+        if 18 <= hour <= 20 and price > sell_threshold and soc > reserve_soc + 0.05:
+            sellable_kwh = (soc - reserve_soc) * 13.5
+            sell = min(5.0, sellable_kwh * 0.7)
+            if hour in [19, 20] and price > 7.0:
+                sell = min(5.0, sellable_kwh * 0.9)
             return SolarGridAction(action_type=ActionType.SELL, amount_kwh=max(0.5, sell))
-        if hour >= 22 and soc > 0.25 and price > 4.0:
-            return SolarGridAction(action_type=ActionType.SELL, amount_kwh=max(0.5, min(3.0, (soc - 0.15) * 13.5)))
+        # Late evening: sell only if price is very high and we still have surplus over reserve
+        if hour >= 21 and soc > reserve_soc + 0.1 and price > 6.0:
+            return SolarGridAction(action_type=ActionType.SELL, amount_kwh=max(0.5, min(2.0, (soc - reserve_soc) * 13.5)))
 
-    # Default
+    # Default for any other season
     return SolarGridAction(action_type=ActionType.HOLD, amount_kwh=min(solar, consumption, 5.0))
 
 

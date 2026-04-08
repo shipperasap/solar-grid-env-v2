@@ -238,7 +238,6 @@ class SolarGridEnvironment:
             next_3h_prices=next_3h,
             solar_generation_kwh=self.state.solar_profile[hour] if hour < 24 else 0.0,
             battery_soc=self.state.battery_soc,
-            battery_capacity_kwh=self.state.battery_capacity_kwh,
             energy_consumed_kwh=self.state.consumption_profile[hour] if hour < 24 else 0.0,
             cumulative_revenue=round(self.state.cumulative_revenue, 2),
             cumulative_cost=round(self.state.cumulative_cost, 2),

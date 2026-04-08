@@ -50,8 +50,6 @@ observation:
     battery_soc:
       type: float
       range: [0.0, 1.0]
-    battery_capacity_kwh:
-      type: float
     energy_consumed_kwh:
       type: float
     cumulative_revenue:
@@ -84,6 +82,13 @@ tasks:
     description: >
       Cloudy monsoon weekday with reduced solar. Goal: net revenue > Rs -20.
       Buy cheap at night, sell during evening peak.
+
+  - id: solar_grid_weekend
+    name: Weekend Summer Surplus
+    difficulty: medium
+    description: >
+      Summer weekend with family home all day. Higher consumption, different
+      IEX price dynamics (real weekend DAM data). Goal: net revenue > Rs -15.
 
   - id: solar_grid_hard
     name: Winter Peak Maximizer

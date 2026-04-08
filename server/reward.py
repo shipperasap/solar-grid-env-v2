@@ -8,6 +8,7 @@ Key improvements over V1:
 4. Much steeper solar waste penalty
 5. End-of-episode bonus scales by season (winter max ~25, summer max ~60)
 6. Self-consumption (Hold) properly valued — avoiding retail IS revenue
+7. Strategy thresholds tuned for real IEX DAM prices (midday ~1 Rs/kWh, evening ~5-10 Rs/kWh)
 """
 
 from typing import Dict
@@ -104,10 +105,10 @@ def compute_reward(
 
     # Sell during peak hours
     if action_type == "sell" and 18 <= hour <= 21:
-        if current_price > 5.5:
+        if current_price > 4.5:
             reward_components["strategy_component"] = max(
                 reward_components["strategy_component"],
-                0.20 * min(1.5, current_price / 7.0)
+                0.20 * min(1.5, current_price / 6.0)
             )
 
     # Penalize selling cheap when peak is coming (but not if battery is full)
@@ -117,7 +118,7 @@ def compute_reward(
             reward_components["strategy_component"] = -0.12
 
     # Night buying: only reward when actually smart
-    if action_type == "buy" and hour <= 5 and current_price < 3.0:
+    if action_type == "buy" and hour <= 5 and current_price < 3.5:
         if season == "monsoon" and battery_soc_before < 0.4:
             reward_components["strategy_component"] = 0.15
         elif battery_soc_before < 0.25:

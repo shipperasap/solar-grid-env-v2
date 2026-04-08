@@ -49,20 +49,24 @@ The environment models what millions of Indian households will face as prosumer 
 
 ---
 
-## 4. Price Patterns (Based on Real IEX DAM Data)
+## 4. Price Patterns (Real IEX DAM Data for Summer, Templates for Winter/Monsoon)
 
-| Time Period | Summer (Rs/kWh) | Winter | Monsoon |
-|---|---|---|---|
-| Night trough (0-5) | 2.2 - 3.0 | 2.5 - 3.5 | 2.8 - 3.5 |
-| Morning ramp (6-11) | 3.8 - 5.8 | 3.8 - 5.5 | 4.0 - 5.0 |
-| Solar dip midday (12-17) | 3.0 - 4.5 | 3.5 - 5.5 | 3.5 - 5.5 |
-| Evening peak (18-21) | 6.0 - 8.2 | 7.0 - 9.0 | 6.5 - 8.0 |
+Summer prices are derived from **actual IEX DAM MCP data** (April 1-8, 2026), covering 6 weekdays and 2 weekend days. Each episode randomly picks one of these real historical days and applies noise.
+
+| Time Period | Summer Weekday (Rs/kWh) | Summer Weekend | Winter | Monsoon |
+|---|---|---|---|---|
+| Night (0-5) | 3.2 - 10.0 | 4.3 - 9.3 | 2.5 - 3.5 | 2.8 - 3.5 |
+| Morning ramp (6-11) | 0.7 - 10.0 | 0.5 - 5.8 | 3.8 - 5.5 | 4.0 - 5.0 |
+| Solar dip midday (12-17) | 0.7 - 4.1 | 1.0 - 3.6 | 3.5 - 5.5 | 3.5 - 5.5 |
+| Evening peak (18-21) | 3.6 - 10.0 | 4.5 - 10.0 | 7.0 - 9.0 | 6.5 - 8.0 |
+
+**Key real-data insights:** Solar RE penetration drives midday prices to ~Rs 1/kWh (much lower than templates). Night prices are surprisingly high (Rs 3-9). The biggest arbitrage opportunity is buy-at-midday, sell-at-evening.
 
 The agent gets a **noisy** 3-hour forecast (+-10%). It does NOT see the full day's prices — it must reason about future prices from partial information.
 
 ---
 
-## 5. Observation Space (13 fields)
+## 5. Observation Space (12 fields)
 
 | Field | Type | Range | Description |
 |---|---|---|---|
@@ -71,7 +75,6 @@ The agent gets a **noisy** 3-hour forecast (+-10%). It does NOT see the full day
 | `next_3h_prices` | list[float] | 3 values | Noisy price forecast |
 | `solar_generation_kwh` | float | 0-5.0 | Solar output this hour |
 | `battery_soc` | float | 0.0-1.0 | Battery state of charge |
-| `battery_capacity_kwh` | float | 13.5 | Total battery capacity |
 | `energy_consumed_kwh` | float | 0.1-3.5 | Household demand |
 | `cumulative_revenue` | float | any | Net Rs earned so far |
 | `cumulative_cost` | float | >= 0 | Total Rs spent |
@@ -141,12 +144,12 @@ Season thresholds: Summer great=Rs 35, good=Rs 18 | Monsoon great=Rs 18, good=Rs
 
 ---
 
-## 7. Three Tasks
+## 7. Four Tasks
 
 ### Task 1: Sunny Day Basics (Easy)
-- **Scenario:** Summer weekday, high solar output, 5% noise
+- **Scenario:** Summer weekday, real IEX prices, 5% noise
 - **Initial battery:** 50% charged
-- **Pass threshold:** Net revenue > Rs 0
+- **Pass threshold:** Net revenue > Rs -5
 - **What it tests:** Can the agent learn the basic solar arbitrage cycle?
 - **Optimal play:** Store solar midday, sell surplus when battery full, sell at evening peak
 
@@ -157,7 +160,14 @@ Season thresholds: Summer great=Rs 35, good=Rs 18 | Monsoon great=Rs 18, good=Rs
 - **What it tests:** Can the agent adapt when solar is scarce? Must manage a near-full battery strategically — sell at peak without draining reserves needed for consumption
 - **Key challenge:** High initial SOC is a trap: selling too aggressively at peak leaves nothing for nighttime, forcing expensive grid purchases
 
-### Task 3: Winter Peak Maximizer (Hard)
+### Task 3: Weekend Summer Surplus (Medium)
+- **Scenario:** Summer weekend, real IEX weekend DAM prices, 8% noise
+- **Initial battery:** 50% charged
+- **Pass threshold:** Net revenue > Rs -15
+- **What it tests:** Can the agent adapt to weekend price dynamics? Lower and less peaky prices, higher daytime consumption (family home all day)
+- **Key challenge:** Weekend evening peaks are weaker (~Rs 5-7.5 vs weekday Rs 7-10), so the agent must be more selective about when to sell
+
+### Task 4: Winter Peak Maximizer (Hard)
 - **Scenario:** Winter weekday, short solar hours, extreme evening peaks (Rs 7-9), 12% noise
 - **Initial battery:** 20% charged
 - **Pass threshold:** Net revenue > Rs 12
@@ -173,7 +183,7 @@ Season thresholds: Summer great=Rs 35, good=Rs 18 | Monsoon great=Rs 18, good=Rs
 | Check | Result |
 |---|---|
 | HF Space returns HTTP 200 | PASS |
-| Root endpoint returns env info + 3 tasks | PASS |
+| Root endpoint returns env info + 4 tasks | PASS |
 | `reset()` returns valid observation (13 fields) | PASS |
 | `step()` returns reward in [-1,1] and done flag | PASS |
 | Full 24-step episode completes correctly | PASS |
@@ -321,7 +331,7 @@ solar_grid_env/
 | Limitation | Potential Improvement |
 |---|---|
 | Monsoon task is hardest for LLMs — high initial SOC creates a non-obvious trap | Could add hint in observation message about SOC management |
-| Price profiles are template-based with Gaussian noise, not historical data | Could integrate real IEX API data for more realistic variation |
+| Winter/monsoon price profiles are template-based (no real data available yet) | Could integrate real IEX API data for winter/monsoon seasons |
 | No multi-day episodes | Extending to week-long trading would test long-horizon planning |
 | Single prosumer only | Multi-agent P2P trading would model CERC regulations more fully |
 

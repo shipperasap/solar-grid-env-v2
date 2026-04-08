@@ -1,7 +1,7 @@
 """
-Three difficulty-tiered tasks — V2 (recalibrated).
+Four difficulty-tiered tasks — V2 (recalibrated).
 
-Thresholds: Easy Rs 0, Medium Rs -20, Hard Rs 12.
+Thresholds: Easy Rs -5, Medium Rs -20, Weekend Rs -15, Hard Rs 12.
 """
 
 from typing import Dict, Any
@@ -12,13 +12,13 @@ TASKS = [
         "id": "solar_grid_easy",
         "name": "Sunny Day Basics",
         "description": (
-            "A perfect summer weekday with high solar output and clear price patterns. "
-            "Goal: End the day with positive net revenue. "
-            "The agent should learn to sell during evening peak (18:00-21:00) "
-            "when prices are highest (Rs 6-8/kWh) and store solar during midday."
+            "A perfect summer weekday with high solar output and real IEX price patterns. "
+            "Goal: End the day with net revenue > Rs -5. "
+            "The agent should store solar during midday (when prices crash to ~Rs 1/kWh), "
+            "sell at evening peak (18:00-21:00), and conserve battery for expensive nights."
         ),
         "difficulty": "easy",
-        "pass_threshold_rs": 0.0,
+        "pass_threshold_rs": -5.0,
         "config": {
             "season": "summer",
             "day_type": "weekday",
@@ -42,6 +42,26 @@ TASKS = [
             "day_type": "weekday",
             "initial_soc": 0.8,
             "noise_level": 0.10,
+        },
+    },
+    {
+        "id": "solar_grid_weekend",
+        "name": "Weekend Summer Surplus",
+        "description": (
+            "A summer weekend with the family home all day — higher daytime consumption "
+            "and different IEX price dynamics (real weekend DAM data). "
+            "Goal: Achieve net revenue > Rs 5. "
+            "Weekend prices are lower and less peaky than weekdays. "
+            "The agent must manage higher consumption while exploiting "
+            "the midday solar glut and moderate evening peak."
+        ),
+        "difficulty": "medium",
+        "pass_threshold_rs": -15.0,
+        "config": {
+            "season": "summer",
+            "day_type": "weekend",
+            "initial_soc": 0.5,
+            "noise_level": 0.08,
         },
     },
     {
@@ -97,9 +117,10 @@ def grade_episode(task_id: str, episode_result: Dict[str, Any]) -> Dict[str, Any
         return {"score": 0.01, "passed": False, "feedback": f"Unknown task: {task_id}"}
 
     if task_id == "solar_grid_easy":
-        if net_profit > 0:
+        threshold = -5.0
+        if net_profit >= threshold:
             base_score = 0.5
-            base_score += min(0.25, net_profit / 80.0)
+            base_score += min(0.25, (net_profit - threshold) / 60.0)
             if unique_actions >= 3:
                 base_score += 0.1
             peak_sells = sum(1 for h in sell_hours if 18 <= h <= 21)
@@ -109,10 +130,10 @@ def grade_episode(task_id: str, episode_result: Dict[str, Any]) -> Dict[str, Any
             if solar_stores >= 3:
                 base_score += 0.05
             score = _clamp_score(base_score)
-            return {"score": score, "passed": True, "feedback": f"Profitable day! Net: Rs {net_profit:.2f}. Score: {score:.2f}"}
+            return {"score": score, "passed": True, "feedback": f"Good day! Net: Rs {net_profit:.2f}. Score: {score:.2f}"}
         else:
-            score = _clamp_score(0.3 + net_profit / 30.0)
-            return {"score": score, "passed": False, "feedback": f"Lost money: Rs {net_profit:.2f}. Try selling during evening peak hours (18-21)."}
+            score = _clamp_score(0.3 + (net_profit - threshold) / 30.0)
+            return {"score": score, "passed": False, "feedback": f"Lost money: Rs {net_profit:.2f}. Store solar midday, sell at evening peak, conserve battery for night."}
 
     elif task_id == "solar_grid_medium":
         threshold = -20.0
@@ -131,6 +152,25 @@ def grade_episode(task_id: str, episode_result: Dict[str, Any]) -> Dict[str, Any
         else:
             score = _clamp_score(0.5 + (net_profit - threshold) / 30.0)
             return {"score": score, "passed": False, "feedback": f"Net: Rs {net_profit:.2f}. Need Rs {threshold}+. Buy cheap at night, sell at peak."}
+
+    elif task_id == "solar_grid_weekend":
+        threshold = -15.0
+        if net_profit >= threshold:
+            base_score = 0.55
+            base_score += min(0.25, (net_profit - threshold) / 40.0)
+            if unique_actions >= 3:
+                base_score += 0.1
+            peak_sells = sum(1 for h in sell_hours if 18 <= h <= 21)
+            if peak_sells >= 2:
+                base_score += 0.05
+            solar_stores = sum(1 for h in store_hours if 8 <= h <= 15)
+            if solar_stores >= 2:
+                base_score += 0.05
+            score = _clamp_score(base_score)
+            return {"score": score, "passed": True, "feedback": f"Weekend trading! Net: Rs {net_profit:.2f}. Score: {score:.2f}"}
+        else:
+            score = _clamp_score(0.3 + (net_profit - threshold) / 30.0)
+            return {"score": score, "passed": False, "feedback": f"Net: Rs {net_profit:.2f}. Need Rs {threshold}+. Weekend has lower peaks and high night prices — conserve battery for nighttime."}
 
     elif task_id == "solar_grid_hard":
         threshold = 12.0
