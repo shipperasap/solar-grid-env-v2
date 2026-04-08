@@ -1,0 +1,106 @@
+name: solar_grid_env
+version: 1.0.0
+description: >
+  Indian rooftop solar prosumer with battery storage making hourly energy
+  trading decisions on India's IEX Day-Ahead Market (DAM). The agent decides
+  each hour whether to sell surplus power to the grid, store it in a battery,
+  buy cheap grid power, or self-consume — maximizing daily revenue.
+
+author: Team Interesting
+team_members:
+  - Madhuram Agarwal (Lead)
+  - Shreyansh Agrawal
+  - Saksham Agrawal
+
+environment:
+  type: sequential
+  max_steps: 24
+  reward_range: [-1.0, 1.0]
+
+action:
+  type: object
+  model: SolarGridAction
+  fields:
+    action_type:
+      type: enum
+      values: [sell, store, buy, hold]
+      description: What to do this hour
+    amount_kwh:
+      type: float
+      min: 0.0
+      max: 10.0
+      description: Energy amount in kWh, clamped to available capacity
+
+observation:
+  type: object
+  model: SolarGridObservation
+  fields:
+    hour:
+      type: int
+      range: [0, 23]
+    current_price:
+      type: float
+      description: IEX DAM price Rs/kWh
+    next_3h_prices:
+      type: list[float]
+      description: Noisy forecast for next 3 hours
+    solar_generation_kwh:
+      type: float
+      range: [0.0, 5.0]
+    battery_soc:
+      type: float
+      range: [0.0, 1.0]
+    battery_capacity_kwh:
+      type: float
+    energy_consumed_kwh:
+      type: float
+    cumulative_revenue:
+      type: float
+    cumulative_cost:
+      type: float
+    hours_remaining:
+      type: int
+      range: [0, 23]
+    day_type:
+      type: str
+      values: [weekday, weekend]
+    season:
+      type: str
+      values: [summer, monsoon, winter]
+    message:
+      type: str
+
+tasks:
+  - id: solar_grid_easy
+    name: Sunny Day Basics
+    difficulty: easy
+    description: >
+      Perfect summer weekday with high solar output. Goal: positive net revenue.
+      Sell during evening peak (18:00-21:00) and store solar during midday.
+
+  - id: solar_grid_medium
+    name: Monsoon Arbitrage
+    difficulty: medium
+    description: >
+      Cloudy monsoon weekday with reduced solar. Goal: net revenue > Rs -20.
+      Buy cheap at night, sell during evening peak.
+
+  - id: solar_grid_hard
+    name: Winter Peak Maximizer
+    difficulty: hard
+    description: >
+      Winter weekday with short solar hours, extreme evening peaks.
+      Goal: net revenue > Rs 12. Perfectly time charge/discharge cycles.
+
+endpoints:
+  websocket: /ws
+  rest:
+    reset: POST /reset
+    step: POST /step/{session_id}
+    tasks: GET /tasks
+    root: GET /
+
+deployment:
+  platform: huggingface-spaces
+  docker: true
+  port: 7860
